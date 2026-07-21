@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – GeoAI Ketapang</title>
+  <meta name="description" content="Dashboard interaktif analisis perubahan vegetasi Kabupaten Ketapang 2024-2025." />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div class="dashboard">
+
+  <!-- ========== SIDEBAR ========== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <a href="index.html" class="sidebar-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        GeoAI Ketapang
+      </a>
+      <a href="index.html" class="sidebar-back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Kembali ke Beranda
+      </a>
+    </div>
+
+    <ul class="sidebar-nav" id="sidebar-nav">
+      <li><a href="#" data-tab="peta" class="active" id="nav-peta">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+        Peta Hasil
+      </a></li>
+      <li><a href="#" data-tab="data" id="nav-data">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        Data &amp; Proses
+      </a></li>
+      <li><a href="#" data-tab="evaluasi" id="nav-evaluasi">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Evaluasi Model
+      </a></li>
+      <li><a href="#" data-tab="insight" id="nav-insight">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Insight Hasil
+      </a></li>
+    </ul>
+
+    <div class="sidebar-footer">
+      Sentinel-2 · Random Forest · Leaflet<br/>
+      © 2025 UAS Kapita Selekta GIS
+    </div>
+  </aside>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <main class="main-content">
+
+    <!-- ====== TAB 1: PETA HASIL ====== -->
+    <div class="tab-panel active" id="panel-peta">
+      <div class="map-container">
+        <!-- Map -->
+        <div id="map"></div>
+
+        <!-- Loading overlay -->
+        <div class="loading-overlay" id="map-loading">
+          <div class="spinner"></div>
+          <div class="loading-text" id="loading-text">Memuat data geospasial…</div>
+        </div>
+
+        <!-- Stats panel -->
+        <div class="map-overlay map-stats" id="map-stats-panel">
+          <h3>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+            Statistik Perubahan
+          </h3>
+          <div class="stat-row"><span class="label">Vegetasi 2024</span><span class="value">2.626.883 ha</span></div>
+          <div class="stat-row"><span class="label">Vegetasi 2025</span><span class="value">2.638.157 ha</span></div>
+          <div class="stat-row"><span class="label">Bertambah (Gain)</span><span class="value gain">+92.064 ha</span></div>
+          <div class="stat-row"><span class="label">Berkurang (Loss)</span><span class="value loss">−80.791 ha</span></div>
+          <div class="stat-row"><span class="label">Perubahan Bersih</span><span class="value net">+11.273 ha</span></div>
+          <div class="stat-row"><span class="label">% Perubahan</span><span class="value net">+0,43%</span></div>
+        </div>
+
+        <!-- Legend panel -->
+        <div class="map-overlay map-legend" id="map-legend-panel">
+          <h4>Legenda</h4>
+          <div class="legend-item"><span class="legend-color" style="background:#2d6a4f;"></span> Batas Kabupaten</div>
+          <div class="legend-item"><span class="legend-color" style="background:#40916c;"></span> Vegetasi 2024</div>
+          <div class="legend-item"><span class="legend-color" style="background:#95d5b2;"></span> Vegetasi 2025</div>
+          <div class="legend-item"><span class="legend-color" style="background:#22c55e;"></span> Gain (Bertambah)</div>
+          <div class="legend-item"><span class="legend-color" style="background:#ef4444;"></span> Loss (Berkurang)</div>
+        </div>
+
+        <!-- Layer control panel -->
+        <div class="map-overlay map-layers" id="map-layers-panel">
+          <h4>Peta Dasar</h4>
+          <div class="basemap-options" id="basemap-options">
+            <label class="basemap-option active" data-basemap="dark">
+              <input type="radio" name="basemap" value="dark" checked />
+              <span class="basemap-swatch" style="background:#1a1a2e;"></span>
+              Dark
+            </label>
+            <label class="basemap-option" data-basemap="satellite">
+              <input type="radio" name="basemap" value="satellite" />
+              <span class="basemap-swatch" style="background:linear-gradient(135deg,#2d4a2d,#1a3a1a);"></span>
+              Satelit
+            </label>
+            <label class="basemap-option" data-basemap="streets">
+              <input type="radio" name="basemap" value="streets" />
+              <span class="basemap-swatch" style="background:linear-gradient(135deg,#e8e0d8,#d4ccc4);"></span>
+              Streets
+            </label>
+            <label class="basemap-option" data-basemap="topo">
+              <input type="radio" name="basemap" value="topo" />
+              <span class="basemap-swatch" style="background:linear-gradient(135deg,#d4e8d0,#c0dab8);"></span>
+              Topografi
+            </label>
+            <label class="basemap-option" data-basemap="light">
+              <input type="radio" name="basemap" value="light" />
+              <span class="basemap-swatch" style="background:#f0f0f0;"></span>
+              Light
+            </label>
+          </div>
+
+          <div class="layers-divider"></div>
+          <h4>Data Layer</h4>
+          <label class="layer-toggle" id="toggle-boundary">
+            <input type="checkbox" checked data-layer="boundary" />
+            <span class="toggle-track"></span>
+            Batas Kabupaten
+          </label>
+          <label class="layer-toggle" id="toggle-veg2024">
+            <input type="checkbox" data-layer="veg2024" />
+            <span class="toggle-track"></span>
+            Vegetasi 2024
+          </label>
+          <label class="layer-toggle" id="toggle-veg2025">
+            <input type="checkbox" data-layer="veg2025" />
+            <span class="toggle-track"></span>
+            Vegetasi 2025
+          </label>
+          <label class="layer-toggle" id="toggle-gain">
+            <input type="checkbox" checked data-layer="gain" />
+            <span class="toggle-track"></span>
+            Gain (Bertambah)
+          </label>
+          <label class="layer-toggle" id="toggle-loss">
+            <input type="checkbox" checked data-layer="loss" />
+            <span class="toggle-track"></span>
+            Loss (Berkurang)
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== TAB 2: DATA & PROSES ====== -->
+    <div class="tab-panel" id="panel-data">
+      <div class="content-panel">
+        <div class="content-header">
+          <h2>Data &amp; Proses</h2>
+          <p>Transparansi sumber data, fitur spektral, dan metodologi klasifikasi yang digunakan dalam proyek ini.</p>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-card">
+            <h4>Sumber Citra</h4>
+            <div class="info-value">Sentinel-2 L2A</div>
+            <div class="info-desc">COPERNICUS/S2_SR_HARMONIZED melalui Google Earth Engine. Resolusi spasial 10 meter.</div>
+          </div>
+          <div class="info-card">
+            <h4>Wilayah Studi</h4>
+            <div class="info-value">Kab. Ketapang</div>
+            <div class="info-desc">Provinsi Kalimantan Barat. Luas wilayah ≈ 2.986.767 ha.</div>
+          </div>
+          <div class="info-card">
+            <h4>Periode Analisis</h4>
+            <div class="info-value">2024 vs 2025</div>
+            <div class="info-desc">Komposit tahunan dengan cloud masking konsisten untuk kedua tahun.</div>
+          </div>
+          <div class="info-card">
+            <h4>Objek Target</h4>
+            <div class="info-value">Vegetasi</div>
+            <div class="info-desc">Klasifikasi biner: Vegetasi (kelas 1) vs Non-Vegetasi (kelas 0).</div>
+          </div>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-card">
+            <h4>Band Spektral</h4>
+            <ul>
+              <li>B2 (Blue) — 490 nm</li>
+              <li>B3 (Green) — 560 nm</li>
+              <li>B4 (Red) — 665 nm</li>
+              <li>B8 (NIR) — 842 nm</li>
+              <li>B11 (SWIR 1) — 1610 nm</li>
+              <li>B12 (SWIR 2) — 2190 nm</li>
+            </ul>
+          </div>
+          <div class="info-card">
+            <h4>Indeks Spektral</h4>
+            <ul>
+              <li>NDVI = (NIR − Red) / (NIR + Red)</li>
+              <li>NDWI = (Green − NIR) / (Green + NIR)</li>
+              <li>NDBI = (SWIR − NIR) / (SWIR + NIR)</li>
+            </ul>
+          </div>
+          <div class="info-card">
+            <h4>Ground Truth</h4>
+            <div class="info-desc">
+              Minimal 300 titik observasi per tahun<br/>
+              150 titik Vegetasi (kelas 1)<br/>
+              150 titik Non-Vegetasi (kelas 0)<br/>
+              Distribusi tersebar merata di wilayah studi
+            </div>
+          </div>
+          <div class="info-card">
+            <h4>Model Klasifikasi</h4>
+            <div class="info-value">Random Forest</div>
+            <div class="info-desc">
+              Split: 70% Training / 30% Testing<br/>
+              Jumlah Trees: 100<br/>
+              Satu model untuk kedua tahun agar perbandingan adil.
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin:32px 0 20px;font-size:1.1rem;">Alur Kerja (Workflow)</h3>
+        <div class="process-steps">
+          <div class="process-step" data-step="1">
+            <div>
+              <h4>Pengambilan Citra</h4>
+              <p>Mengambil komposit Sentinel-2 untuk 2024 dan 2025 dengan cloud masking menggunakan band QA60.</p>
+            </div>
+          </div>
+          <div class="process-step" data-step="2">
+            <div>
+              <h4>Feature Engineering</h4>
+              <p>Menghitung indeks spektral (NDVI, NDWI, NDBI) dan menggabungkannya dengan band asli menjadi feature stack.</p>
+            </div>
+          </div>
+          <div class="process-step" data-step="3">
+            <div>
+              <h4>Pembuatan Ground Truth</h4>
+              <p>Menandai titik-titik sampel vegetasi dan non-vegetasi secara manual berdasarkan interpretasi visual citra satelit.</p>
+            </div>
+          </div>
+          <div class="process-step" data-step="4">
+            <div>
+              <h4>Training & Testing</h4>
+              <p>Membagi data dengan rasio 70:30 menggunakan randomColumn(), lalu melatih model Random Forest.</p>
+            </div>
+          </div>
+          <div class="process-step" data-step="5">
+            <div>
+              <h4>Klasifikasi & Deteksi Perubahan</h4>
+              <p>Mengklasifikasikan kedua citra dengan model yang sama, lalu menghitung area gain dan loss.</p>
+            </div>
+          </div>
+          <div class="process-step" data-step="6">
+            <div>
+              <h4>Ekspor & Visualisasi</h4>
+              <p>Mengekspor hasil ke format GeoJSON dan menyajikannya melalui WebGIS interaktif ini.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== TAB 3: EVALUASI MODEL ====== -->
+    <div class="tab-panel" id="panel-evaluasi">
+      <div class="content-panel">
+        <div class="content-header">
+          <h2>Evaluasi Model</h2>
+          <p>Validasi kualitas model Random Forest menggunakan Confusion Matrix dan metrik APRF dari data testing (30%).</p>
+        </div>
+
+        <h3 style="margin-bottom:20px;font-size:1.1rem;">Confusion Matrix</h3>
+        <div class="matrix-wrapper">
+          <table class="confusion-matrix" id="confusion-matrix">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Prediksi: Vegetasi</th>
+                <th>Prediksi: Non-Vegetasi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Aktual: Vegetasi</th>
+                <td class="tp" id="cm-tp">—</td>
+                <td class="fn" id="cm-fn">—</td>
+              </tr>
+              <tr>
+                <th>Aktual: Non-Vegetasi</th>
+                <td class="fp" id="cm-fp">—</td>
+                <td class="tn" id="cm-tn">—</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="max-width:320px;">
+            <div class="info-card" style="margin-bottom:0;">
+              <h4>Cara Membaca</h4>
+              <div class="info-desc">
+                <strong style="color:var(--accent-green);">TP</strong> — Model benar mengenali vegetasi<br/>
+                <strong style="color:var(--accent-cyan);">TN</strong> — Model benar mengenali non-vegetasi<br/>
+                <strong style="color:var(--accent-red);">FP</strong> — Model salah menyebut vegetasi<br/>
+                <strong style="color:var(--accent-amber);">FN</strong> — Model gagal mengenali vegetasi
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin:32px 0 20px;font-size:1.1rem;">Metrik Kualitas (APRF)</h3>
+        <div class="metrics-grid" id="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-name">Accuracy</div>
+            <div class="metric-value" id="metric-accuracy">—</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="bar-accuracy" style="width:0%"></div></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">Precision</div>
+            <div class="metric-value" id="metric-precision">—</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="bar-precision" style="width:0%"></div></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">Recall</div>
+            <div class="metric-value" id="metric-recall">—</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="bar-recall" style="width:0%"></div></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-name">F1-Score</div>
+            <div class="metric-value" id="metric-f1">—</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="bar-f1" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <div class="prose">
+          <h4>Interpretasi & Keterbatasan</h4>
+          <ul>
+            <li>Resolusi Sentinel-2 (10m) mampu menangkap pola vegetasi dalam skala lanskap, tetapi tidak cukup detail untuk membedakan jenis tanaman individual.</li>
+            <li>Cloud masking menggunakan band QA60 mungkin tidak sempurna, sehingga sisa awan tipis bisa memengaruhi hasil klasifikasi.</li>
+            <li>Area transisi seperti batas hutan dan perkebunan berpotensi diklasifikasikan secara ambigu karena campuran piksel (<em>mixed pixels</em>).</li>
+            <li>Model dilatih pada satu periode dan diterapkan pada dua tahun, sehingga asumsinya adalah kondisi spektral vegetasi relatif konsisten.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== TAB 4: INSIGHT HASIL ====== -->
+    <div class="tab-panel" id="panel-insight">
+      <div class="content-panel">
+        <div class="content-header">
+          <h2>Insight Hasil</h2>
+          <p>Temuan utama dari analisis perubahan vegetasi Kabupaten Ketapang antara 2024 dan 2025.</p>
+        </div>
+
+        <h3 style="margin-bottom:20px;font-size:1.1rem;">Lokasi Perubahan Terbesar</h3>
+
+        <div class="insight-location" id="insight-gain">
+          <div class="insight-info">
+            <h4 style="color:var(--accent-green);">🌿 Area Gain Terbesar</h4>
+            <p>Penambahan vegetasi seluas <strong>1.458,37 ha</strong> terdeteksi di wilayah ini.</p>
+            <div class="insight-coords">📍 Lon: 110.2475 &nbsp;|&nbsp; Lat: -0.7217</div>
+          </div>
+          <button class="btn-zoom" onclick="zoomToLocation(110.2475, -0.7217, 'Gain Terbesar')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom ke Lokasi
+          </button>
+        </div>
+
+        <div class="insight-location" id="insight-loss">
+          <div class="insight-info">
+            <h4 style="color:var(--accent-red);">🔥 Area Loss Terbesar</h4>
+            <p>Penyusutan vegetasi seluas <strong>2.207,94 ha</strong> terdeteksi di wilayah ini.</p>
+            <div class="insight-coords">📍 Lon: 109.9561 &nbsp;|&nbsp; Lat: -0.5890</div>
+          </div>
+          <button class="btn-zoom" onclick="zoomToLocation(109.9561, -0.5890, 'Loss Terbesar')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom ke Lokasi
+          </button>
+        </div>
+
+        <div class="prose" style="margin-top:24px;">
+          <h4>Pola Distribusi Perubahan</h4>
+          <p>
+            Secara umum, perubahan vegetasi di Kabupaten Ketapang menunjukkan pola positif dengan perubahan bersih sebesar <strong>+11.273 ha (+0,43%)</strong>. 
+            Meskipun terdapat area yang mengalami penyusutan (loss) cukup signifikan, area yang mengalami penambahan vegetasi (gain) lebih dominan secara akumulatif.
+          </p>
+          <ul>
+            <li><strong>Area Loss</strong> cenderung terkonsentrasi di wilayah yang mengalami tekanan aktivitas manusia seperti pembukaan lahan perkebunan, pertambangan, atau perluasan permukiman.</li>
+            <li><strong>Area Gain</strong> kemungkinan berasal dari proses suksesi alami, program reboisasi, atau area pertanian yang kembali ditanami setelah masa bera.</li>
+          </ul>
+        </div>
+
+        <div class="prose">
+          <h4>Kemungkinan Penyebab</h4>
+          <ul>
+            <li><strong>Deforestasi:</strong> Pembukaan hutan untuk perkebunan kelapa sawit yang merupakan salah satu komoditas utama Kalimantan Barat.</li>
+            <li><strong>Perluasan Permukiman:</strong> Pertumbuhan area terbangun di sekitar pusat kota dan akses jalan utama.</li>
+            <li><strong>Reforestasi/Revegetasi:</strong> Program pemulihan lahan kritis oleh pemerintah daerah atau inisiatif swasta.</li>
+            <li><strong>Dinamika Pertanian:</strong> Siklus tanam-bera pada lahan pertanian yang mempengaruhi tutupan vegetasi musiman.</li>
+          </ul>
+        </div>
+
+        <div class="prose">
+          <h4>Rekomendasi</h4>
+          <ul>
+            <li>Monitoring berkala menggunakan data Sentinel-2 setiap semester untuk mendeteksi dini perubahan tutupan lahan.</li>
+            <li>Prioritaskan pengawasan pada zona loss terbesar untuk mencegah deforestasi lebih lanjut.</li>
+            <li>Integrasikan data ini dengan rencana tata ruang wilayah (RTRW) Kabupaten Ketapang.</li>
+            <li>Sosialisasi hasil kepada instansi terkait (Dinas Lingkungan Hidup, BAPPEDA) untuk mendukung kebijakan berbasis data.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- App Script -->
+<script src="js/app.js"></script>
+</body>
+</html>
