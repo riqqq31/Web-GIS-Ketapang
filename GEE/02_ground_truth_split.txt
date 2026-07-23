@@ -1,0 +1,535 @@
+// =====================================================
+// 02_ground_truth_split
+// Kabupaten Ketapang - Vegetasi 2024 dan 2025
+// Ground Truth dan Split Training-Testing
+// =====================================================
+
+// 0. ASSET DAN PARAMETER
+var assetRoot = 'projects/kelompok-16-uas/assets/';
+
+var boundaryAssetId = assetRoot + 'batas_wilayah_ketapang';
+var groundTruthAssetId = assetRoot + 'ketapang_ground_truth';
+var stack2024AssetId = assetRoot + 'ketapang_feature_stack_2024';
+var stack2025AssetId = assetRoot + 'ketapang_feature_stack_2025';
+
+var analysisScale = 10;
+var seed = 42;
+
+// 0.60 = 60% training dan 40% testing
+// Ubah menjadi 0.70 untuk 70:30
+// Ubah menjadi 0.80 untuk 80:20
+var trainingRatio = 0.60;
+
+var featureBands = [
+  'B2', 'B3', 'B4', 'B8', 'B11', 'B12',
+  'NDVI', 'NDMI', 'NDBI', 'BSI'
+];
+
+
+// =====================================================
+// 1. IMPORT DATA
+// =====================================================
+
+var ketapang = ee.FeatureCollection(boundaryAssetId);
+var aoi = ketapang.geometry();
+
+var groundTruth = ee.FeatureCollection(groundTruthAssetId);
+
+var stack2024 = ee.Image(
+  stack2024AssetId
+).select(featureBands);
+
+var stack2025 = ee.Image(
+  stack2025AssetId
+).select(featureBands);
+
+Map.centerObject(aoi, 8);
+
+Map.addLayer(
+  ketapang,
+  {color: 'red'},
+  'Batas Kabupaten Ketapang'
+);
+
+Map.addLayer(
+  stack2024,
+  {bands: ['B4', 'B3', 'B2'], min: 0, max: 0.3},
+  'RGB 2024',
+  false
+);
+
+Map.addLayer(
+  stack2025,
+  {bands: ['B4', 'B3', 'B2'], min: 0, max: 0.3},
+  'RGB 2025',
+  false
+);
+
+print(
+  'Band feature stack 2024:',
+  stack2024.bandNames()
+);
+
+print(
+  'Band feature stack 2025:',
+  stack2025.bandNames()
+);
+
+
+// =====================================================
+// 2. CEK GROUND TRUTH
+// =====================================================
+
+function addYearClassKey(featureCollection) {
+
+  return featureCollection.map(function(feature) {
+
+    var yearText = ee.Number(
+      feature.get('year')
+    ).format();
+
+    var classText = ee.Number(
+      feature.get('class')
+    ).format();
+
+    return feature.set(
+      'year_class',
+      ee.String(yearText)
+        .cat('_class_')
+        .cat(classText)
+    );
+  });
+}
+
+
+var groundTruthCheck = addYearClassKey(
+  groundTruth
+);
+
+print(
+  'Total ground truth:',
+  groundTruth.size()
+);
+
+print(
+  'Distribusi kelas:',
+  groundTruth.aggregate_histogram('class')
+);
+
+print(
+  'Distribusi tahun:',
+  groundTruth.aggregate_histogram('year')
+);
+
+print(
+  'Distribusi tahun dan kelas:',
+  groundTruthCheck.aggregate_histogram(
+    'year_class'
+  )
+);
+
+print(
+  'Contoh atribut ground truth:',
+  groundTruth.first()
+);
+
+
+// =====================================================
+// 3. TAMPILKAN GROUND TRUTH
+// =====================================================
+
+var veg2024 = groundTruth.filter(
+  ee.Filter.and(
+    ee.Filter.eq('year', 2024),
+    ee.Filter.eq('class', 1)
+  )
+);
+
+var nonveg2024 = groundTruth.filter(
+  ee.Filter.and(
+    ee.Filter.eq('year', 2024),
+    ee.Filter.eq('class', 0)
+  )
+);
+
+var veg2025 = groundTruth.filter(
+  ee.Filter.and(
+    ee.Filter.eq('year', 2025),
+    ee.Filter.eq('class', 1)
+  )
+);
+
+var nonveg2025 = groundTruth.filter(
+  ee.Filter.and(
+    ee.Filter.eq('year', 2025),
+    ee.Filter.eq('class', 0)
+  )
+);
+
+Map.addLayer(
+  veg2024,
+  {color: '00ff00'},
+  'GT Vegetasi 2024',
+  false
+);
+
+Map.addLayer(
+  nonveg2024,
+  {color: 'ff0000'},
+  'GT Nonvegetasi 2024',
+  false
+);
+
+Map.addLayer(
+  veg2025,
+  {color: '00ffff'},
+  'GT Vegetasi 2025',
+  false
+);
+
+Map.addLayer(
+  nonveg2025,
+  {color: 'ff9900'},
+  'GT Nonvegetasi 2025',
+  false
+);
+
+
+// =====================================================
+// 4. EKSTRAKSI NILAI 10 FITUR
+// =====================================================
+
+var gt2024 = groundTruth.filter(
+  ee.Filter.eq('year', 2024)
+);
+
+var gt2025 = groundTruth.filter(
+  ee.Filter.eq('year', 2025)
+);
+
+print(
+  'Jumlah ground truth 2024:',
+  gt2024.size()
+);
+
+print(
+  'Jumlah ground truth 2025:',
+  gt2025.size()
+);
+
+var retainedProperties = [
+  'class',
+  'year',
+  'label',
+  'source',
+  'longitude',
+  'latitude'
+];
+
+var samples2024 = stack2024.sampleRegions({
+  collection: gt2024,
+  properties: retainedProperties,
+  scale: analysisScale,
+  geometries: true,
+  tileScale: 8
+});
+
+var samples2025 = stack2025.sampleRegions({
+  collection: gt2025,
+  properties: retainedProperties,
+  scale: analysisScale,
+  geometries: true,
+  tileScale: 8
+});
+
+var samples = samples2024
+  .merge(samples2025)
+  .filter(
+    ee.Filter.notNull(featureBands)
+  );
+
+print(
+  'Sampel hasil ekstraksi 2024:',
+  samples2024.size()
+);
+
+print(
+  'Sampel hasil ekstraksi 2025:',
+  samples2025.size()
+);
+
+print(
+  'Total sampel setelah ekstraksi:',
+  samples.size()
+);
+
+print(
+  'Contoh sampel dengan 10 fitur:',
+  samples.first()
+);
+
+var samplesCheck = addYearClassKey(
+  samples
+);
+
+print(
+  'Distribusi sampel per tahun-kelas:',
+  samplesCheck.aggregate_histogram(
+    'year_class'
+  )
+);
+
+
+// =====================================================
+// 5. PURE SPLIT TERSTRATIF
+// Pembagian dilakukan terpisah untuk setiap kombinasi
+// tahun dan kelas agar komposisinya tetap seimbang.
+// =====================================================
+
+function addSplitSet(
+  featureCollection,
+  yearValue,
+  classValue,
+  seedOffset
+) {
+
+  var group = featureCollection
+    .filter(
+      ee.Filter.and(
+        ee.Filter.eq(
+          'year',
+          yearValue
+        ),
+        ee.Filter.eq(
+          'class',
+          classValue
+        )
+      )
+    )
+    .randomColumn(
+      'split_rand',
+      seed + seedOffset
+    )
+    .sort('split_rand');
+
+  var groupSize = group.size();
+
+  var trainingCount = groupSize
+    .multiply(trainingRatio)
+    .floor()
+    .toInt();
+
+  var groupList = group.toList(
+    groupSize
+  );
+
+  return ee.FeatureCollection(
+    ee.List.sequence(
+      0,
+      groupSize.subtract(1)
+    ).map(function(index) {
+
+      index = ee.Number(index);
+
+      var feature = ee.Feature(
+        groupList.get(index)
+      );
+
+      var splitSet = ee.String(
+        ee.Algorithms.If(
+          index.lt(trainingCount),
+          'training',
+          'testing'
+        )
+      );
+
+      return feature.set({
+        split_set: splitSet,
+        split_order: index.add(1),
+        training_ratio: trainingRatio
+      });
+    })
+  );
+}
+
+
+var split2024Class0 = addSplitSet(
+  samples,
+  2024,
+  0,
+  1
+);
+
+var split2024Class1 = addSplitSet(
+  samples,
+  2024,
+  1,
+  2
+);
+
+var split2025Class0 = addSplitSet(
+  samples,
+  2025,
+  0,
+  3
+);
+
+var split2025Class1 = addSplitSet(
+  samples,
+  2025,
+  1,
+  4
+);
+
+
+var samplesWithSplit = split2024Class0
+  .merge(split2024Class1)
+  .merge(split2025Class0)
+  .merge(split2025Class1);
+
+
+var trainingData = samplesWithSplit.filter(
+  ee.Filter.eq(
+    'split_set',
+    'training'
+  )
+);
+
+var testingData = samplesWithSplit.filter(
+  ee.Filter.eq(
+    'split_set',
+    'testing'
+  )
+);
+
+
+// =====================================================
+// 6. CEK DISTRIBUSI TRAINING DAN TESTING
+// =====================================================
+
+var trainingCheck = addYearClassKey(
+  trainingData
+);
+
+var testingCheck = addYearClassKey(
+  testingData
+);
+
+print(
+  'Seed split:',
+  seed
+);
+
+print(
+  'Rasio training:',
+  trainingRatio
+);
+
+print(
+  'Rasio testing:',
+  ee.Number(1).subtract(
+    trainingRatio
+  )
+);
+
+print(
+  'Jumlah training data:',
+  trainingData.size()
+);
+
+print(
+  'Jumlah testing data:',
+  testingData.size()
+);
+
+print(
+  'Distribusi training class:',
+  trainingData.aggregate_histogram(
+    'class'
+  )
+);
+
+print(
+  'Distribusi testing class:',
+  testingData.aggregate_histogram(
+    'class'
+  )
+);
+
+print(
+  'Distribusi training year:',
+  trainingData.aggregate_histogram(
+    'year'
+  )
+);
+
+print(
+  'Distribusi testing year:',
+  testingData.aggregate_histogram(
+    'year'
+  )
+);
+
+print(
+  'Distribusi training per tahun-kelas:',
+  trainingCheck.aggregate_histogram(
+    'year_class'
+  )
+);
+
+print(
+  'Distribusi testing per tahun-kelas:',
+  testingCheck.aggregate_histogram(
+    'year_class'
+  )
+);
+
+
+// =====================================================
+// 7. EXPORT KE GOOGLE DRIVE
+// =====================================================
+
+Export.table.toDrive({
+  collection: groundTruth,
+  description: 'Ketapang_GroundTruth',
+  folder: 'UAS_Ketapang',
+  fileNamePrefix: 'Ketapang_GroundTruth',
+  fileFormat: 'GeoJSON'
+});
+
+Export.table.toDrive({
+  collection: trainingData,
+  description: 'Ketapang_TrainingData',
+  folder: 'UAS_Ketapang',
+  fileNamePrefix: 'Ketapang_TrainingData',
+  fileFormat: 'CSV'
+});
+
+Export.table.toDrive({
+  collection: testingData,
+  description: 'Ketapang_TestingData',
+  folder: 'UAS_Ketapang',
+  fileNamePrefix: 'Ketapang_TestingData',
+  fileFormat: 'CSV'
+});
+
+
+// =====================================================
+// 8. EXPORT KE GEE ASSETS
+// =====================================================
+
+Export.table.toAsset({
+  collection: trainingData,
+  description: 'Export_TrainingData_Ketapang',
+  assetId:
+    assetRoot +
+    'ketapang_training_data'
+});
+
+Export.table.toAsset({
+  collection: testingData,
+  description: 'Export_TestingData_Ketapang',
+  assetId:
+    assetRoot +
+    'ketapang_testing_data'
+});

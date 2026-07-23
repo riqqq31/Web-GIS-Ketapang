@@ -11,11 +11,11 @@
     zoom: 9,
     maxZoom: 18,
     files: {
-      boundary: 'Ketapang.geojson',
-      veg2024:  'Ketapang_Vegetasi_2024.geojson',
-      veg2025:  'Ketapang_Vegetasi_2025.geojson',
-      gain:     'Ketapang_Gain_2024_2025.geojson',
-      loss:     'Ketapang_Loss_2024_2025.geojson',
+      boundary: '../data/Ketapang.geojson',
+      veg2024:  '../results/Ketapang_Vegetasi_2024.geojson',
+      veg2025:  '../results/Ketapang_Vegetasi_2025.geojson',
+      gain:     '../results/Ketapang_Gain_2024_2025.geojson',
+      loss:     '../results/Ketapang_Loss_2024_2025.geojson',
     },
     styles: {
       boundary: { color: '#2d6a4f', weight: 2.5, fillOpacity: 0, dashArray: '6 4' },
@@ -241,7 +241,9 @@
     const boundaryLayer = await loadGeoJSON('boundary');
     if (boundaryLayer) {
       boundaryLayer.addTo(map);
-      map.fitBounds(boundaryLayer.getBounds(), { padding: [30, 30] });
+      if (typeof boundaryLayer.getBounds === 'function') {
+        map.fitBounds(boundaryLayer.getBounds(), { padding: [30, 30] });
+      }
     }
 
     // Pre-load gain and loss (checked by default)

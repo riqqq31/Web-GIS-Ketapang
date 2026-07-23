@@ -1,0 +1,162 @@
+// =====================================================
+// 01_preprocessing_feature_stack
+// Kabupaten Ketapang - Vegetasi 2024 dan 2025
+// =====================================================
+
+var admin2 = ee.FeatureCollection('FAO/GAUL/2015/level2');
+var ketapang = admin2
+  .filter(ee.Filter.eq('ADM0_NAME', 'Indonesia'))
+  .filter(ee.Filter.eq('ADM1_NAME', 'Kalimantan Barat'))
+  .filter(ee.Filter.eq('ADM2_NAME', 'Ketapang'));
+
+var aoi = ketapang.geometry();
+
+var collectionId = 'COPERNICUS/S2_SR_HARMONIZED';
+var start2024 = '2024-01-01';
+var end2024 = '2025-01-01';
+var start2025 = '2025-01-01';
+var end2025 = '2026-01-01';
+var cloudThreshold = 80;
+var analysisScale = 10;
+var compositeMethod = 'median';
+
+var baseBands = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12'];
+var featureBands = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12', 'NDVI', 'NDMI', 'NDBI', 'BSI'];
+
+Map.centerObject(aoi, 8);
+Map.addLayer(ketapang, {color: 'red'}, 'Batas Kabupaten Ketapang');
+
+function maskS2Clouds(image) {
+  var scl = image.select('SCL');
+  var mask = scl.neq(3)
+    .and(scl.neq(8))
+    .and(scl.neq(9))
+    .and(scl.neq(10))
+    .and(scl.neq(11));
+
+  return image
+    .updateMask(mask)
+    .select(baseBands)
+    .multiply(0.0001)
+    .copyProperties(image, ['system:time_start']);
+}
+
+function getCollection(startDate, endDate) {
+  return ee.ImageCollection(collectionId)
+    .filterBounds(aoi)
+    .filterDate(startDate, endDate)
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', cloudThreshold))
+    .map(maskS2Clouds);
+}
+
+function addSpectralIndices(image) {
+  var ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI');
+  var ndmi = image.normalizedDifference(['B8', 'B11']).rename('NDMI');
+  var ndbi = image.normalizedDifference(['B11', 'B8']).rename('NDBI');
+  var bsi = image.expression(
+    '((SWIR1 + RED) - (NIR + BLUE)) / ((SWIR1 + RED) + (NIR + BLUE))', {
+      SWIR1: image.select('B11'),
+      RED: image.select('B4'),
+      NIR: image.select('B8'),
+      BLUE: image.select('B2')
+    }
+  ).rename('BSI');
+
+  return image.addBands([ndvi, ndmi, ndbi, bsi]).select(featureBands);
+}
+
+function makeFeatureStack(startDate, endDate) {
+  var collection = getCollection(startDate, endDate);
+  var composite = collection.median().clip(aoi);
+  return addSpectralIndices(composite).clip(aoi);
+}
+
+var s2_2024 = getCollection(start2024, end2024);
+var s2_2025 = getCollection(start2025, end2025);
+var stack2024 = makeFeatureStack(start2024, end2024);
+var stack2025 = makeFeatureStack(start2025, end2025);
+
+var rgbVis = {bands: ['B4', 'B3', 'B2'], min: 0, max: 0.3};
+var falseColorVis = {bands: ['B8', 'B4', 'B3'], min: 0, max: 0.4};
+var ndviVis = {min: -0.2, max: 0.8, palette: ['brown', 'yellow', 'green']};
+var bsiVis = {min: -0.5, max: 0.8, palette: ['green', 'yellow', 'brown']};
+
+Map.addLayer(stack2024, rgbVis, 'RGB 2024');
+Map.addLayer(stack2025, rgbVis, 'RGB 2025');
+Map.addLayer(stack2024, falseColorVis, 'False Color Vegetasi 2024', false);
+Map.addLayer(stack2025, falseColorVis, 'False Color Vegetasi 2025', false);
+Map.addLayer(stack2024.select('NDVI'), ndviVis, 'NDVI 2024', false);
+Map.addLayer(stack2025.select('NDVI'), ndviVis, 'NDVI 2025', false);
+Map.addLayer(stack2024.select('BSI'), bsiVis, 'BSI 2024', false);
+Map.addLayer(stack2025.select('BSI'), bsiVis, 'BSI 2025', false);
+
+print('Nama koleksi:', collectionId);
+print('Jumlah citra Sentinel-2 2024:', s2_2024.size());
+print('Jumlah citra Sentinel-2 2025:', s2_2025.size());
+print('Periode 2024:', '2024-01-01 s/d 2024-12-31');
+print('Periode 2025:', '2025-01-01 s/d 2025-12-31');
+print('Cloud masking:', 'SCL mask: shadow, medium/high cloud, cirrus, snow/ice');
+print('Batas maksimum awan (%):', cloudThreshold);
+print('Composite:', compositeMethod);
+print('Resolusi analisis (m):', analysisScale);
+print('Sumber batas administrasi:', 'FAO/GAUL/2015/level2');
+print('Feature bands:', featureBands);
+print('Band Feature Stack 2024:', stack2024.bandNames());
+print('Band Feature Stack 2025:', stack2025.bandNames());
+
+Export.image.toDrive({
+  image: stack2024,
+  description: 'Ketapang_FeatureStack_2024',
+  folder: 'UAS_Ketapang',
+  fileNamePrefix: 'Ketapang_FeatureStack_2024',
+  region: aoi,
+  scale: analysisScale,
+  maxPixels: 1e13,
+  fileFormat: 'GeoTIFF'
+});
+
+Export.image.toDrive({
+  image: stack2025,
+  description: 'Ketapang_FeatureStack_2025',
+  folder: 'UAS_Ketapang',
+  fileNamePrefix: 'Ketapang_FeatureStack_2025',
+  region: aoi,
+  scale: analysisScale,
+  maxPixels: 1e13,
+  fileFormat: 'GeoTIFF'
+});
+
+// =====================================================
+// EXPORT FEATURE STACK KE GEE ASSETS
+// =====================================================
+
+Export.image.toAsset({
+  image: stack2024,
+  description: 'Export_Ketapang_FeatureStack_2024',
+  assetId:
+    'projects/kelompok-16-uas/assets/' +
+    'ketapang_feature_stack_2024',
+  region: aoi,
+  scale: analysisScale,
+  maxPixels: 1e13
+});
+
+Export.image.toAsset({
+  image: stack2025,
+  description: 'Export_Ketapang_FeatureStack_2025',
+  assetId:
+    'projects/kelompok-16-uas/assets/' +
+    'ketapang_feature_stack_2025',
+  region: aoi,
+  scale: analysisScale,
+  maxPixels: 1e13
+});
+
+// EXPORT BATAS KABUPATEN KETAPANG UNTUK WEBGIS
+Export.table.toDrive({
+  collection: ketapang,
+  description: 'Batas_Wilayah_Ketapang',
+  folder: 'UAS_Ketapang_WebGIS',
+  fileNamePrefix: 'batas_wilayah_ketapang',
+  fileFormat: 'GeoJSON'
+});

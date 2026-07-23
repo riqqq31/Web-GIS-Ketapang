@@ -1,0 +1,331 @@
+// =====================================================
+// UAS - ANGGOTA 3
+// Feature Stack, Ground Truth, Split Training-Testing
+// Wilayah : Kabupaten Ketapang, Kalimantan Barat
+// Objek   : Vegetasi
+// Tahun   : 2024 dan 2025
+// =====================================================
+
+
+// =====================================================
+// 1. BATAS ADMINISTRASI KABUPATEN KETAPANG
+// =====================================================
+
+var admin = ee.FeatureCollection('FAO/GAUL/2015/level2');
+
+var ketapang = admin
+  .filter(ee.Filter.eq('ADM0_NAME', 'Indonesia'))
+  .filter(ee.Filter.eq('ADM1_NAME', 'Kalimantan Barat'))
+  .filter(ee.Filter.eq('ADM2_NAME', 'Ketapang'));
+
+var aoi = ketapang.geometry();
+
+Map.centerObject(aoi, 8);
+Map.addLayer(ketapang, {color: 'black'}, 'Batas Kabupaten Ketapang');
+
+print('Batas Kabupaten Ketapang:', ketapang);
+
+
+// =====================================================
+// 2. PERIODE CITRA
+// =====================================================
+
+var start2024 = '2024-01-01';
+var end2024   = '2024-12-31';
+
+var start2025 = '2025-01-01';
+var end2025   = '2025-12-31';
+
+
+// =====================================================
+// 3. CLOUD MASKING SENTINEL-2
+// =====================================================
+
+function maskS2clouds(image) {
+  var scl = image.select('SCL');
+
+  var mask = scl.neq(3)      // cloud shadow
+                .and(scl.neq(8))   // medium probability cloud
+                .and(scl.neq(9))   // high probability cloud
+                .and(scl.neq(10))  // cirrus
+                .and(scl.neq(11)); // snow/ice
+
+  return image.updateMask(mask)
+              .divide(10000)
+              .copyProperties(image, ['system:time_start']);
+}
+
+
+// =====================================================
+// 4. MEMBUAT FEATURE STACK
+// =====================================================
+
+function makeFeatureStack(startDate, endDate, yearLabel) {
+
+  var collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(aoi)
+    .filterDate(startDate, endDate)
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 60))
+    .map(maskS2clouds);
+
+  print('Jumlah citra Sentinel-2 ' + yearLabel + ':', collection.size());
+
+  var composite = collection.median().clip(aoi);
+
+  // Band utama
+  var b2  = composite.select('B2').rename('B2');
+  var b3  = composite.select('B3').rename('B3');
+  var b4  = composite.select('B4').rename('B4');
+  var b8  = composite.select('B8').rename('B8');
+  var b11 = composite.select('B11').rename('B11');
+  var b12 = composite.select('B12').rename('B12');
+
+  // NDVI = vegetasi
+  var ndvi = composite.normalizedDifference(['B8', 'B4']).rename('NDVI');
+
+  // NDMI = kelembapan vegetasi
+  var ndmi = composite.normalizedDifference(['B8', 'B11']).rename('NDMI');
+
+  // NDBI = area terbangun/lahan terbuka tertentu
+  var ndbi = composite.normalizedDifference(['B11', 'B8']).rename('NDBI');
+
+  // BSI = bare soil index / tanah terbuka
+  var bsi = composite.expression(
+    '((SWIR + RED) - (NIR + BLUE)) / ((SWIR + RED) + (NIR + BLUE))', {
+      'SWIR': composite.select('B11'),
+      'RED' : composite.select('B4'),
+      'NIR' : composite.select('B8'),
+      'BLUE': composite.select('B2')
+    }).rename('BSI');
+
+  // Feature stack final
+  var stack = b2.addBands(b3)
+                .addBands(b4)
+                .addBands(b8)
+                .addBands(b11)
+                .addBands(b12)
+                .addBands(ndvi)
+                .addBands(ndmi)
+                .addBands(ndbi)
+                .addBands(bsi)
+                .clip(aoi);
+
+  return stack;
+}
+
+
+// =====================================================
+// 5. FEATURE STACK 2024 DAN 2025
+// =====================================================
+
+var stack2024 = makeFeatureStack(start2024, end2024, '2024');
+var stack2025 = makeFeatureStack(start2025, end2025, '2025');
+
+print('Band Feature Stack 2024:', stack2024.bandNames());
+print('Band Feature Stack 2025:', stack2025.bandNames());
+
+
+// =====================================================
+// 6. VISUALISASI
+// =====================================================
+
+var rgbVis = {
+  bands: ['B4', 'B3', 'B2'],
+  min: 0,
+  max: 0.3
+};
+
+var falseColorVis = {
+  bands: ['B8', 'B4', 'B3'],
+  min: 0,
+  max: 0.4
+};
+
+var ndviVis = {
+  min: -1,
+  max: 1,
+  palette: ['8b0000', 'ff8c00', 'ffff00', '7fff00', '006400']
+};
+
+Map.addLayer(stack2024, rgbVis, 'RGB 2024');
+Map.addLayer(stack2025, rgbVis, 'RGB 2025');
+
+Map.addLayer(stack2024, falseColorVis, 'False Color Vegetasi 2024');
+Map.addLayer(stack2025, falseColorVis, 'False Color Vegetasi 2025');
+
+Map.addLayer(stack2024.select('NDVI'), ndviVis, 'NDVI 2024');
+Map.addLayer(stack2025.select('NDVI'), ndviVis, 'NDVI 2025');
+
+
+// =====================================================
+// 7. EXPORT FEATURE STACK
+// =====================================================
+
+Export.image.toDrive({
+  image: stack2024,
+  description: 'Ketapang_FeatureStack_2024',
+  folder: 'UAS_Ketapang_Anggota3',
+  fileNamePrefix: 'Ketapang_FeatureStack_2024',
+  region: aoi,
+  scale: 10,
+  maxPixels: 1e13,
+  fileFormat: 'GeoTIFF'
+});
+
+Export.image.toDrive({
+  image: stack2025,
+  description: 'Ketapang_FeatureStack_2025',
+  folder: 'UAS_Ketapang_Anggota3',
+  fileNamePrefix: 'Ketapang_FeatureStack_2025',
+  region: aoi,
+  scale: 10,
+  maxPixels: 1e13,
+  fileFormat: 'GeoTIFF'
+});
+
+// =====================================================
+// FINALISASI DAN EXPORT GROUND TRUTH MANUAL
+// =====================================================
+
+var assetRoot = 'projects/kelompok-16-uas/assets/';
+
+function prepareManualPoints(
+  featureCollection,
+  classValue,
+  yearValue,
+  labelValue
+) {
+  return ee.FeatureCollection(featureCollection)
+    .map(function(point) {
+      var geometry = point.geometry();
+      var coordinates = geometry.coordinates();
+
+      return ee.Feature(geometry).set({
+        class: classValue,
+        year: yearValue,
+        label: labelValue,
+        source: 'interpretasi_manual',
+        longitude: coordinates.get(0),
+        latitude: coordinates.get(1)
+      });
+    });
+}
+
+
+// Menambahkan atribut kelas dan tahun
+var veg2024_final = prepareManualPoints(
+  veg2024,
+  1,
+  2024,
+  'vegetasi'
+);
+
+var nonveg2024_final = prepareManualPoints(
+  nonveg2024,
+  0,
+  2024,
+  'nonvegetasi'
+);
+
+var veg2025_final = prepareManualPoints(
+  veg2025,
+  1,
+  2025,
+  'vegetasi'
+);
+
+var nonveg2025_final = prepareManualPoints(
+  nonveg2025,
+  0,
+  2025,
+  'nonvegetasi'
+);
+
+
+// Menggabungkan 400 titik
+var groundTruthManual = veg2024_final
+  .merge(nonveg2024_final)
+  .merge(veg2025_final)
+  .merge(nonveg2025_final);
+
+
+// Pemeriksaan jumlah
+print(
+  'Vegetasi 2024:',
+  veg2024_final.size()
+);
+
+print(
+  'Nonvegetasi 2024:',
+  nonveg2024_final.size()
+);
+
+print(
+  'Vegetasi 2025:',
+  veg2025_final.size()
+);
+
+print(
+  'Nonvegetasi 2025:',
+  nonveg2025_final.size()
+);
+
+print(
+  'Total ground truth:',
+  groundTruthManual.size()
+);
+
+print(
+  'Contoh atribut:',
+  groundTruthManual.first()
+);
+
+
+// Menampilkan hasil final
+Map.addLayer(
+  veg2024_final,
+  {color: '00ff00'},
+  'GT Vegetasi 2024',
+  false
+);
+
+Map.addLayer(
+  nonveg2024_final,
+  {color: 'ff0000'},
+  'GT Nonvegetasi 2024',
+  false
+);
+
+Map.addLayer(
+  veg2025_final,
+  {color: '00ffff'},
+  'GT Vegetasi 2025',
+  false
+);
+
+Map.addLayer(
+  nonveg2025_final,
+  {color: 'ff9900'},
+  'GT Nonvegetasi 2025',
+  false
+);
+
+
+// Export sebagai satu Asset
+Export.table.toAsset({
+  collection: groundTruthManual,
+  description: 'Export_Ketapang_GroundTruth',
+  assetId:
+    assetRoot +
+    'ketapang_ground_truth'
+});
+
+
+// Backup ke Google Drive
+Export.table.toDrive({
+  collection: groundTruthManual,
+  description: 'Ketapang_GroundTruth',
+  folder: 'UAS_Ketapang',
+  fileNamePrefix: 'Ketapang_GroundTruth',
+  fileFormat: 'GeoJSON'
+});

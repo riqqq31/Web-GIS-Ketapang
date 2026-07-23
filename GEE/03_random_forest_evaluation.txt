@@ -1,0 +1,1179 @@
+ =====================================================
+ 03_random_forest_model_evaluation
+ Kabupaten Ketapang - Anggota 4 Model & Evaluasi
+ =====================================================
+
+ 1. SETUP AREA & DATA
+var groupAssetPath =
+  'projectskelompok-16-uasassets';
+
+var trainingData = ee.FeatureCollection(
+  groupAssetPath +
+  'ketapang_training_data'
+);
+
+var testingData = ee.FeatureCollection(
+  groupAssetPath +
+  'ketapang_testing_data'
+);
+
+var ketapang = ee.FeatureCollection(
+  groupAssetPath +
+  'batas_wilayah_ketapang'
+);
+
+var aoi = ketapang.geometry();
+
+var analysisScale = 10;
+var seed = 42;
+
+var featureBands = [
+  'B2', 'B3', 'B4', 'B8', 'B11', 'B12',
+  'NDVI', 'NDMI', 'NDBI', 'BSI'
+];
+
+Map.centerObject(aoi, 8);
+
+Map.addLayer(
+  ketapang,
+  {color 'red'},
+  'Batas Kabupaten Ketapang'
+);
+
+
+ =====================================================
+ 2. CEK KUALITAS DATA
+ =====================================================
+
+print('=== CEK DISTRIBUSI KELAS ===');
+
+print(
+  'Jumlah sampel Training',
+  trainingData.size()
+);
+
+print(
+  'Jumlah sampel Testing',
+  testingData.size()
+);
+
+print(
+  'Distribusi kelas Training',
+  trainingData.aggregate_histogram('class')
+);
+
+print(
+  'Distribusi kelas Testing',
+  testingData.aggregate_histogram('class')
+);
+
+print(
+  'Distribusi tahun Training',
+  trainingData.aggregate_histogram('year')
+);
+
+print(
+  'Distribusi tahun Testing',
+  testingData.aggregate_histogram('year')
+);
+
+
+ Membaca rasio split langsung dari hasil File 02
+var trainingRatio = ee.Number(
+  trainingData.first().get(
+    'training_ratio'
+  )
+);
+
+var testingRatio = ee.Number(1)
+  .subtract(trainingRatio);
+
+var splitLabel = trainingRatio
+  .multiply(100)
+  .format('%.0f')
+  .cat('')
+  .cat(
+    testingRatio
+      .multiply(100)
+      .format('%.0f')
+  );
+
+print(
+  'Rasio split TrainingTesting',
+  splitLabel
+);
+
+
+ =====================================================
+ 3. FEATURE STACK 2024 & 2025
+ =====================================================
+
+var stack2024 = ee.Image(
+  groupAssetPath +
+  'ketapang_feature_stack_2024'
+).select(featureBands);
+
+var stack2025 = ee.Image(
+  groupAssetPath +
+  'ketapang_feature_stack_2025'
+).select(featureBands);
+
+
+ =====================================================
+ 4. PELATIHAN MODEL RANDOM FOREST
+ =====================================================
+
+function trainRandomForest(
+  features,
+  seedValue
+) {
+
+  return ee.Classifier.smileRandomForest({
+    numberOfTrees 100,
+    variablesPerSplit 3,
+    minLeafPopulation 5,
+    bagFraction 0.5,
+    maxNodes 20,
+    seed seedValue
+  }).train({
+    features features,
+    classProperty 'class',
+    inputProperties featureBands
+  });
+}
+
+
+var rfModel = trainRandomForest(
+  trainingData,
+  seed
+);
+
+print('=== MODEL ===');
+
+print(
+  'Model Random Forest berhasil dilatih dengan 100 trees.'
+);
+
+
+ =====================================================
+ 5. KLASIFIKASI CITRA 2024 DAN 2025
+ =====================================================
+
+var classified2024 = stack2024
+  .classify(rfModel)
+  .rename('classification');
+
+var classified2025 = stack2025
+  .classify(rfModel)
+  .rename('classification');
+
+
+var classVis = {
+  min 0,
+  max 1,
+  palette [
+    'd73027',
+    '1a9850'
+  ]
+};
+
+
+Map.addLayer(
+  classified2024,
+  classVis,
+  'Klasifikasi Vegetasi 2024'
+);
+
+Map.addLayer(
+  classified2025,
+  classVis,
+  'Klasifikasi Vegetasi 2025'
+);
+
+
+ =====================================================
+ 6. VALIDASI HOLDOUT PURE SPLIT
+ =====================================================
+
+var validatedHoldout =
+  testingData.classify(
+    rfModel
+  );
+
+
+var holdoutMatrix =
+  validatedHoldout.errorMatrix(
+    'class',
+    'classification',
+    [0, 1]
+  );
+
+
+print(
+  ee.String(
+    '=== CONFUSION MATRIX HOLDOUT '
+  )
+    .cat(splitLabel)
+    .cat(' ===')
+);
+
+
+print(
+  'Confusion Matrix Holdout',
+  holdoutMatrix
+);
+
+
+print(
+  'Overall Accuracy Holdout',
+  holdoutMatrix.accuracy()
+);
+
+
+ Hasil evaluasi utama memakai data testing
+var validated =
+  validatedHoldout;
+
+var errorMatrix =
+  holdoutMatrix;
+
+
+print(
+  '=== CONFUSION MATRIX ==='
+);
+
+
+print(
+  'Confusion Matrix',
+  errorMatrix
+);
+
+
+print(
+  'Urutan kelas terdeteksi (order)',
+  errorMatrix.order()
+);
+
+
+ =====================================================
+ 7. LEARNING CURVE RANDOM FOREST
+
+ Tetap menggunakan satu split yang sama.
+ Data testing tidak berubah.
+ Jumlah training ditambah secara bertahap.
+ =====================================================
+
+var learningTrainingData =
+  trainingData.randomColumn(
+    'learning_rand',
+    seed + 100
+  );
+
+
+var learningFractions = ee.List([
+  0.25,
+  0.50,
+  0.75,
+  1.00
+]);
+
+
+var learningCurve = ee.FeatureCollection(
+  learningFractions.map(
+    function(fraction) {
+
+      fraction =
+        ee.Number(fraction);
+
+
+      var trainingSubset =
+        learningTrainingData.filter(
+          ee.Filter.lt(
+            'learning_rand',
+            fraction
+          )
+        );
+
+
+      var learningModel =
+        trainRandomForest(
+          trainingSubset,
+          seed
+        );
+
+
+      var learningTrainingMatrix =
+        trainingSubset
+          .classify(
+            learningModel
+          )
+          .errorMatrix(
+            'class',
+            'classification',
+            [0, 1]
+          );
+
+
+      var learningTestingMatrix =
+        testingData
+          .classify(
+            learningModel
+          )
+          .errorMatrix(
+            'class',
+            'classification',
+            [0, 1]
+          );
+
+
+      return ee.Feature(
+        null,
+        {
+
+          training_fraction
+            fraction,
+
+          training_percent
+            fraction.multiply(100),
+
+          training_samples
+            trainingSubset.size(),
+
+          training_accuracy
+            learningTrainingMatrix
+              .accuracy(),
+
+          validation_accuracy
+            learningTestingMatrix
+              .accuracy()
+        }
+      );
+    }
+  )
+);
+
+
+print(
+  '=== LEARNING CURVE RANDOM FOREST ==='
+);
+
+
+print(
+  'Data Learning Curve',
+  learningCurve
+);
+
+
+var learningCurveChart =
+  ui.Chart.feature.byFeature({
+    features
+      learningCurve,
+
+    xProperty
+      'training_samples',
+
+    yProperties [
+      'training_accuracy',
+      'validation_accuracy'
+    ]
+  })
+    .setChartType(
+      'LineChart'
+    )
+    .setSeriesNames([
+      'Training Accuracy',
+      'Validation Accuracy'
+    ])
+    .setOptions({
+
+      title
+        'Learning Curve Random Forest',
+
+      hAxis {
+        title
+          'Jumlah Sampel Training'
+      },
+
+      vAxis {
+        title
+          'Accuracy',
+
+        viewWindow {
+          min 0,
+          max 1
+        }
+      },
+
+      pointSize
+        6,
+
+      lineWidth
+        2,
+
+      legend {
+        position
+          'bottom'
+      }
+    });
+
+
+print(
+  learningCurveChart
+);
+
+
+ =====================================================
+ 8. ACCURACY, PRECISION, RECALL, F1-SCORE
+ =====================================================
+
+var overallAccuracy =
+  errorMatrix.accuracy();
+
+
+var kappaIndex =
+  errorMatrix.kappa();
+
+
+var orderList =
+  errorMatrix.order();
+
+
+var orderKeys =
+  orderList.map(
+    function(v) {
+
+      return ee.Number(v)
+        .format();
+    }
+  );
+
+
+var consumersAccuracyArray =
+  errorMatrix
+    .consumersAccuracy();
+
+
+var producersAccuracyArray =
+  errorMatrix
+    .producersAccuracy();
+
+
+ Precision
+ array 1 x n, ambil baris pertama
+var precisionList = ee.List(
+  consumersAccuracyArray
+    .toList()
+    .get(0)
+);
+
+
+ Recall
+ array n x 1, setiap baris satu elemen
+var recallRows =
+  producersAccuracyArray
+    .toList();
+
+
+var recallList =
+  recallRows.map(
+    function(row) {
+
+      return ee.List(row)
+        .get(0);
+    }
+  );
+
+
+var precisionDict =
+  ee.Dictionary.fromLists(
+    orderKeys,
+    precisionList
+  );
+
+
+var recallDict =
+  ee.Dictionary.fromLists(
+    orderKeys,
+    recallList
+  );
+
+
+ Ambil nilai kelas Vegetasi
+ label 1
+var precisionVegetasi =
+  ee.Number(
+    precisionDict.get(
+      '1',
+      -1
+    )
+  );
+
+
+var recallVegetasi =
+  ee.Number(
+    recallDict.get(
+      '1',
+      -1
+    )
+  );
+
+
+var f1ScoreVegetasi =
+  ee.Algorithms.If(
+
+    precisionVegetasi
+      .eq(-1)
+      .or(
+        recallVegetasi.eq(-1)
+      ),
+
+    -1,
+
+    ee.Number(2)
+      .multiply(
+        precisionVegetasi
+          .multiply(
+            recallVegetasi
+          )
+      )
+      .divide(
+        precisionVegetasi
+          .add(
+            recallVegetasi
+          )
+      )
+  );
+
+
+f1ScoreVegetasi =
+  ee.Number(
+    f1ScoreVegetasi
+  );
+
+
+print(
+  '=== HASIL EVALUASI MODEL (Kelas Vegetasi = label 1) ==='
+);
+
+
+print(
+  'Jumlah kelas terdeteksi',
+  orderList.size()
+);
+
+
+print(
+  '1. Overall Accuracy (OA)',
+  overallAccuracy
+);
+
+
+print(
+  '2. Precision (Vegetasi)',
+  precisionVegetasi,
+  '(-1 = kelas tidak terdeteksi)'
+);
+
+
+print(
+  '3. Recall (Vegetasi)',
+  recallVegetasi,
+  '(-1 = kelas tidak terdeteksi)'
+);
+
+
+print(
+  '4. F1-Score (Vegetasi)',
+  f1ScoreVegetasi,
+  '(-1 = kelas tidak terdeteksi)'
+);
+
+
+orderList.size().evaluate(
+  function(n) {
+
+    if (n  2) {
+
+      print(
+        '⚠️ PERINGATAN Hanya ' +
+        n +
+        ' kelas terdeteksi di confusion matrix. ' +
+        'Cek ulang distribusi kelas trainingtesting di bagian atas dan proses ' +
+        'sampling di skrip 02.'
+      );
+
+    } else {
+
+      print(
+        '✅ Data terdeteksi 2 kelas dengan baik. Evaluasi di atas valid digunakan.'
+      );
+    }
+  }
+);
+
+
+ =====================================================
+ 9. FALSE POSITIVE & FALSE NEGATIVE
+ =====================================================
+
+var matrixArray =
+  errorMatrix.array();
+
+
+var matrixList =
+  matrixArray.toList();
+
+
+var rowDict =
+  ee.Dictionary.fromLists(
+    orderKeys,
+    matrixList
+  );
+
+
+function getCell(
+  actualLabel,
+  predictedLabel
+) {
+
+  var rowRaw =
+    rowDict.get(
+      actualLabel,
+      null
+    );
+
+
+  var row =
+    ee.Algorithms.If(
+      rowRaw,
+      ee.List(rowRaw),
+      null
+    );
+
+
+  var colDict =
+    ee.Algorithms.If(
+
+      row,
+
+      ee.Dictionary.fromLists(
+        orderKeys,
+        ee.List(row)
+      ),
+
+      ee.Dictionary({})
+    );
+
+
+  return ee.Number(
+    ee.Dictionary(
+      colDict
+    ).get(
+      predictedLabel,
+      -1
+    )
+  );
+}
+
+
+var truePositive =
+  getCell(
+    '1',
+    '1'
+  );
+
+
+var trueNegative =
+  getCell(
+    '0',
+    '0'
+  );
+
+
+var falsePositive =
+  getCell(
+    '0',
+    '1'
+  );
+
+
+var falseNegative =
+  getCell(
+    '1',
+    '0'
+  );
+
+
+print(
+  '=== ANALISIS FALSE POSITIVE & FALSE NEGATIVE ==='
+);
+
+
+print(
+  'True Positive (Vegetasi diprediksi benar)',
+  truePositive,
+  '(-1 = tidak tersedia)'
+);
+
+
+print(
+  'True Negative (Non-Vegetasi diprediksi benar)',
+  trueNegative,
+  '(-1 = tidak tersedia)'
+);
+
+
+print(
+  'False Positive (Non-Vegetasi tapi ditebak Vegetasi)',
+  falsePositive,
+  '(-1 = tidak tersedia)'
+);
+
+
+print(
+  'False Negative (Vegetasi tapi ditebak Non-Vegetasi)',
+  falseNegative,
+  '(-1 = tidak tersedia)'
+);
+
+
+var falsePositivePoints =
+  validated.filter(
+    ee.Filter.and(
+
+      ee.Filter.eq(
+        'class',
+        0
+      ),
+
+      ee.Filter.eq(
+        'classification',
+        1
+      )
+    )
+  );
+
+
+var falseNegativePoints =
+  validated.filter(
+    ee.Filter.and(
+
+      ee.Filter.eq(
+        'class',
+        1
+      ),
+
+      ee.Filter.eq(
+        'classification',
+        0
+      )
+    )
+  );
+
+
+Map.addLayer(
+  stack2024,
+  {
+    bands [
+      'B4',
+      'B3',
+      'B2'
+    ],
+
+    min
+      0,
+
+    max
+      0.3
+  },
+  'RGB 2024 untuk Cek Kesalahan',
+  false
+);
+
+
+Map.addLayer(
+  stack2025,
+  {
+    bands [
+      'B4',
+      'B3',
+      'B2'
+    ],
+
+    min
+      0,
+
+    max
+      0.3
+  },
+  'RGB 2025 untuk Cek Kesalahan',
+  false
+);
+
+
+Map.addLayer(
+  stack2024.select(
+    'NDVI'
+  ),
+  {
+    min
+      -0.2,
+
+    max
+      0.8,
+
+    palette [
+      'brown',
+      'yellow',
+      'green'
+    ]
+  },
+  'NDVI 2024 untuk Cek Kesalahan',
+  false
+);
+
+
+Map.addLayer(
+  stack2025.select(
+    'NDVI'
+  ),
+  {
+    min
+      -0.2,
+
+    max
+      0.8,
+
+    palette [
+      'brown',
+      'yellow',
+      'green'
+    ]
+  },
+  'NDVI 2025 untuk Cek Kesalahan',
+  false
+);
+
+
+Map.addLayer(
+  falsePositivePoints.style({
+
+    color
+      'ffff00',
+
+    pointSize
+      8,
+
+    width
+      2
+  }),
+  {},
+  'Titik False Positive',
+  false
+);
+
+
+Map.addLayer(
+  falseNegativePoints.style({
+
+    color
+      'ff00ff',
+
+    pointSize
+      8,
+
+    width
+      2
+  }),
+  {},
+  'Titik False Negative',
+  false
+);
+
+
+print(
+  'Jumlah titik False Positive',
+  falsePositivePoints.size()
+);
+
+
+print(
+  'Jumlah titik False Negative',
+  falseNegativePoints.size()
+);
+
+
+print(
+  'Distribusi False Positive per tahun',
+  falsePositivePoints
+    .aggregate_histogram(
+      'year'
+    )
+);
+
+
+print(
+  'Distribusi False Negative per tahun',
+  falseNegativePoints
+    .aggregate_histogram(
+      'year'
+    )
+);
+
+
+print(
+  'Daftar titik False Positive',
+  falsePositivePoints
+);
+
+
+print(
+  'Daftar titik False Negative',
+  falseNegativePoints
+);
+
+
+ =====================================================
+ 10. PERBANDINGAN TRAINING DAN TESTING
+ =====================================================
+
+var trainingMatrix =
+  rfModel.confusionMatrix();
+
+
+print(
+  '=== PERBANDINGAN TRAINING DAN TESTING ==='
+);
+
+
+print(
+  'Confusion Matrix Training',
+  trainingMatrix
+);
+
+
+print(
+  'Accuracy Training',
+  trainingMatrix.accuracy()
+);
+
+
+print(
+  'Confusion Matrix Testing',
+  holdoutMatrix
+);
+
+
+print(
+  'Accuracy Testing',
+  holdoutMatrix.accuracy()
+);
+
+
+ =====================================================
+ 11. PENILAIAN KELAYAKAN MODEL
+ =====================================================
+
+overallAccuracy.evaluate(
+  function(oa) {
+
+    kappaIndex.evaluate(
+      function(kappa) {
+
+        orderList.size().evaluate(
+          function(n) {
+
+            print(
+              '=== PENILAIAN KELAYAKAN MODEL ==='
+            );
+
+
+            print(
+              'Overall Accuracy ' +
+              (oa  100)
+                .toFixed(2) +
+              '%'
+            );
+
+
+            print(
+              'Kappa Index ' +
+              kappa.toFixed(3)
+            );
+
+
+            if (n  2) {
+
+              print(
+                '❌ Model TIDAK DAPAT dinilai kelayakannya secara valid untuk 2 kelas.'
+              );
+
+              return;
+            }
+
+
+            var kelayakan;
+
+
+            if (
+              oa = 0.85 &&
+              kappa = 0.61
+            ) {
+
+              kelayakan =
+                'Model CUKUP LAYAK dipakai untuk analisis perubahan tutupan ' +
+                'vegetasi 2024-2025. Akurasi keseluruhan tinggi dan nilai Kappa menunjukkan ' +
+                'kesepakatan yang kuat antara hasil klasifikasi dan data referensi.';
+
+            } else if (
+              oa = 0.70 &&
+              kappa = 0.41
+            ) {
+
+              kelayakan =
+                'Model CUKUP DAPAT DIGUNAKAN namun dengan CATATAN. Akurasi dan ' +
+                'Kappa berada pada kategori sedang, hasil klasifikasi memberikan gambaran ' +
+                'umum pola perubahan namun perlu verifikasi lebih lanjut.';
+
+            } else {
+
+              kelayakan =
+                'Model BELUM CUKUP LAYAK dipakai untuk analisis perubahan secara ' +
+                'kuantitatif. Disarankan meninjau ulang kualitas dan jumlah sampel trainingtesting.';
+            }
+
+
+            print(
+              kelayakan
+            );
+          }
+        );
+      }
+    );
+  }
+);
+
+
+ =====================================================
+ 12. EXPORT HASIL
+ =====================================================
+
+Export.table.toAsset({
+  collection
+    validated,
+
+  description
+    'Export_Validated_Testing_Data',
+
+  assetId
+    groupAssetPath +
+    'ketapang_rf_validated_testing'
+});
+
+
+Export.image.toDrive({
+  image
+    classified2024,
+
+  description
+    'Ketapang_Klasifikasi_2024',
+
+  folder
+    'UAS_Ketapang',
+
+  fileNamePrefix
+    'Ketapang_Klasifikasi_2024',
+
+  region
+    aoi,
+
+  scale
+    analysisScale,
+
+  maxPixels
+    1e13,
+
+  fileFormat
+    'GeoTIFF'
+});
+
+
+Export.image.toDrive({
+  image
+    classified2025,
+
+  description
+    'Ketapang_Klasifikasi_2025',
+
+  folder
+    'UAS_Ketapang',
+
+  fileNamePrefix
+    'Ketapang_Klasifikasi_2025',
+
+  region
+    aoi,
+
+  scale
+    analysisScale,
+
+  maxPixels
+    1e13,
+
+  fileFormat
+    'GeoTIFF'
+});
+
+
+Export.image.toAsset({
+  image
+    classified2024.toByte(),
+
+  description
+    'Export_Ketapang_Classified_2024',
+
+  assetId
+    groupAssetPath +
+    'ketapang_classified_2024',
+
+  region
+    aoi,
+
+  scale
+    analysisScale,
+
+  maxPixels
+    1e13,
+
+  pyramidingPolicy {
+    '.default'
+      'mode'
+  }
+});
+
+
+Export.image.toAsset({
+  image
+    classified2025.toByte(),
+
+  description
+    'Export_Ketapang_Classified_2025',
+
+  assetId
+    groupAssetPath +
+    'ketapang_classified_2025',
+
+  region
+    aoi,
+
+  scale
+    analysisScale,
+
+  maxPixels
+    1e13,
+
+  pyramidingPolicy {
+    '.default'
+      'mode'
+  }
+});

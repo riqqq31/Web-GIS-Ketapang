@@ -1,0 +1,782 @@
+// =====================================================
+// 04_classification_change_export
+// Kabupaten Ketapang - Perubahan Vegetasi 2024-2025
+// =====================================================
+
+
+// =====================================================
+// 1. ASSET DAN PARAMETER
+// =====================================================
+
+var assetRoot =
+  'projects/kelompok-16-uas/assets/';
+
+var boundaryAssetId =
+  assetRoot + 'batas_wilayah_ketapang';
+
+var classified2024AssetId =
+  assetRoot + 'ketapang_classified_2024';
+
+var classified2025AssetId =
+  assetRoot + 'ketapang_classified_2025';
+
+var analysisScale = 10;
+
+// Khusus GeoJSON WebGIS
+// Vegetasi dibuat lebih ringan karena cakupannya sangat luas
+var vegetationVectorScale = 250;
+var vegetationSimplifyTolerance = 150;
+var minVegetationPatchHa = 100;
+
+// Gain dan loss tetap memakai pengaturan lama
+var changeVectorScale = 50;
+var changeSimplifyTolerance = 30;
+var minChangePatchHa = 1;
+
+
+// =====================================================
+// 2. IMPORT KLASIFIKASI
+// =====================================================
+
+var ketapang = ee.FeatureCollection(
+  boundaryAssetId
+);
+
+var aoi = ketapang.geometry();
+
+var classified2024 = ee.Image(
+  classified2024AssetId
+)
+  .select('classification')
+  .rename('classification')
+  .toByte()
+  .clip(aoi);
+
+var classified2025 = ee.Image(
+  classified2025AssetId
+)
+  .select('classification')
+  .rename('classification')
+  .toByte()
+  .clip(aoi);
+
+
+// Area valid pada kedua tahun
+var commonMask = classified2024
+  .mask()
+  .and(classified2025.mask())
+  .rename('common_mask');
+
+classified2024 = classified2024
+  .updateMask(commonMask);
+
+classified2025 = classified2025
+  .updateMask(commonMask);
+
+
+Map.centerObject(aoi, 8);
+
+Map.addLayer(
+  ketapang,
+  {color: 'black'},
+  'Batas Kabupaten Ketapang'
+);
+
+
+var classVis = {
+  min: 0,
+  max: 1,
+  palette: [
+    'd73027',
+    '1a9850'
+  ]
+};
+
+Map.addLayer(
+  classified2024,
+  classVis,
+  'Vegetasi 2024',
+  false
+);
+
+Map.addLayer(
+  classified2025,
+  classVis,
+  'Vegetasi 2025',
+  false
+);
+
+
+// =====================================================
+// 3. CHANGE MAP EMPAT KATEGORI
+//
+// 0 = tetap nonvegetasi
+// 1 = gain vegetasi
+// 2 = loss vegetasi
+// 3 = tetap vegetasi
+// =====================================================
+
+var changeMap = classified2024
+  .multiply(2)
+  .add(classified2025)
+  .rename('change_code')
+  .toByte()
+  .updateMask(commonMask)
+  .clip(aoi);
+
+
+var stayNonvegetation = changeMap
+  .eq(0)
+  .rename('stay_nonvegetation');
+
+var gain = changeMap
+  .eq(1)
+  .rename('gain');
+
+var loss = changeMap
+  .eq(2)
+  .rename('loss');
+
+var stayVegetation = changeMap
+  .eq(3)
+  .rename('stay_vegetation');
+
+
+var vegetation2024 = classified2024
+  .eq(1)
+  .rename('vegetation_2024');
+
+var vegetation2025 = classified2025
+  .eq(1)
+  .rename('vegetation_2025');
+
+
+var changeVis = {
+  min: 0,
+  max: 3,
+  palette: [
+    'bdbdbd', // tetap nonvegetasi
+    '7fff00', // gain
+    'ff0000', // loss
+    '006400'  // tetap vegetasi
+  ]
+};
+
+
+Map.addLayer(
+  changeMap,
+  changeVis,
+  'Perubahan Vegetasi 2024-2025'
+);
+
+Map.addLayer(
+  gain.selfMask(),
+  {palette: ['7fff00']},
+  'Gain Vegetasi',
+  false
+);
+
+Map.addLayer(
+  loss.selfMask(),
+  {palette: ['ff0000']},
+  'Loss Vegetasi',
+  false
+);
+
+Map.addLayer(
+  stayVegetation.selfMask(),
+  {palette: ['006400']},
+  'Tetap Vegetasi',
+  false
+);
+
+
+print('=== KODE CHANGE MAP ===');
+print('0 = Tetap nonvegetasi');
+print('1 = Gain vegetasi');
+print('2 = Loss vegetasi');
+print('3 = Tetap vegetasi');
+
+
+// =====================================================
+// 4. HITUNG NILAI UTAMA
+// Seluruh statistik dihitung satu kali
+// melalui batch export CSV
+// =====================================================
+
+var pixelAreaHa = ee.Image
+  .pixelArea()
+  .divide(10000);
+
+
+// Band luas yang dibutuhkan
+var areaBands = ee.Image.cat([
+
+  pixelAreaHa
+    .updateMask(vegetation2024)
+    .rename('vegetation_2024_ha'),
+
+  pixelAreaHa
+    .updateMask(vegetation2025)
+    .rename('vegetation_2025_ha'),
+
+  pixelAreaHa
+    .updateMask(gain)
+    .rename('gain_ha'),
+
+  pixelAreaHa
+    .updateMask(loss)
+    .rename('loss_ha'),
+
+  pixelAreaHa
+    .updateMask(stayVegetation)
+    .rename('stay_vegetation_ha')
+]);
+
+
+var areaResult = areaBands.reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: aoi,
+  scale: analysisScale,
+  maxPixels: 1e13,
+  tileScale: 16
+});
+
+
+var districtAreaHa = ee.Number(
+  aoi.area(1)
+).divide(10000);
+
+
+var vegetation2024Ha = ee.Number(
+  areaResult.get(
+    'vegetation_2024_ha',
+    0
+  )
+);
+
+var vegetation2025Ha = ee.Number(
+  areaResult.get(
+    'vegetation_2025_ha',
+    0
+  )
+);
+
+var gainHa = ee.Number(
+  areaResult.get(
+    'gain_ha',
+    0
+  )
+);
+
+var lossHa = ee.Number(
+  areaResult.get(
+    'loss_ha',
+    0
+  )
+);
+
+var stayVegetationHa = ee.Number(
+  areaResult.get(
+    'stay_vegetation_ha',
+    0
+  )
+);
+
+
+// Luas 2025 dikurangi luas 2024
+var netChangeHa = vegetation2025Ha
+  .subtract(vegetation2024Ha);
+
+
+// Persentase vegetasi terhadap luas Ketapang
+var vegetation2024Percent =
+  vegetation2024Ha
+    .divide(districtAreaHa)
+    .multiply(100);
+
+var vegetation2025Percent =
+  vegetation2025Ha
+    .divide(districtAreaHa)
+    .multiply(100);
+
+
+// Persentase perubahan terhadap vegetasi 2024
+var changePercent = ee.Number(
+  ee.Algorithms.If(
+    vegetation2024Ha.gt(0),
+
+    netChangeHa
+      .divide(vegetation2024Ha)
+      .multiply(100),
+
+    0
+  )
+);
+
+
+// Satu tabel statistik utama
+var changeStatistics = ee.FeatureCollection([
+  ee.Feature(null, {
+
+    wilayah:
+      'Kabupaten Ketapang',
+
+    periode:
+      '2024-2025',
+
+    objek_target:
+      'Vegetasi',
+
+    luas_kabupaten_ha:
+      districtAreaHa,
+
+    luas_vegetasi_2024_ha:
+      vegetation2024Ha,
+
+    persentase_vegetasi_2024:
+      vegetation2024Percent,
+
+    luas_vegetasi_2025_ha:
+      vegetation2025Ha,
+
+    persentase_vegetasi_2025:
+      vegetation2025Percent,
+
+    luas_gain_ha:
+      gainHa,
+
+    luas_loss_ha:
+      lossHa,
+
+    luas_tetap_vegetasi_ha:
+      stayVegetationHa,
+
+    net_change_ha:
+      netChangeHa,
+
+    persentase_perubahan:
+      changePercent,
+
+    resolusi_perhitungan_m:
+      analysisScale
+  })
+]);
+
+
+print(
+  'Statistik tidak dicetak untuk menghindari timeout.'
+);
+
+print(
+  'Jalankan task Ketapang_Change_Statistics.'
+);
+
+
+// =====================================================
+// 5. VECTORIZE EMPAT LAYER
+// =====================================================
+
+function vectorizeLayer(
+  binaryImage,
+  properties,
+  minimumAreaHa,
+  vectorScaleValue,
+  simplifyToleranceValue
+) {
+
+  var rasterForVector = binaryImage
+    .selfMask()
+    .rename('class_value')
+    .toInt();
+
+
+  var vectors = rasterForVector.reduceToVectors({
+    geometry: aoi,
+    scale: vectorScaleValue,
+    geometryType: 'polygon',
+    eightConnected: true,
+    labelProperty: 'class_value',
+    maxPixels: 1e13,
+    tileScale: 16
+  });
+
+
+  var vectorsWithAttributes = vectors.map(
+    function(feature) {
+
+      var originalGeometry =
+        feature.geometry();
+
+      var areaHa = originalGeometry
+        .area(1)
+        .divide(10000);
+
+      var centroidCoordinates =
+        originalGeometry
+          .centroid(1)
+          .coordinates();
+
+      var simplifiedGeometry =
+        originalGeometry.simplify(
+          simplifyToleranceValue
+        );
+
+      return ee.Feature(
+        simplifiedGeometry,
+        feature.toDictionary()
+      )
+        .set(properties)
+        .set({
+
+          area_ha:
+            areaHa,
+
+          centroid_longitude:
+            centroidCoordinates.get(0),
+
+          centroid_latitude:
+            centroidCoordinates.get(1),
+
+          vector_scale_m:
+            vectorScaleValue
+        });
+    }
+  );
+
+
+  return vectorsWithAttributes.filter(
+    ee.Filter.gte(
+      'area_ha',
+      minimumAreaHa
+    )
+  );
+}
+
+
+// Vegetasi 2024
+var vegetation2024Vectors =
+  vectorizeLayer(
+    vegetation2024,
+
+    {
+      year: 2024,
+      category: 'vegetasi',
+      label: 'Vegetasi 2024'
+    },
+
+    minVegetationPatchHa,
+    vegetationVectorScale,
+    vegetationSimplifyTolerance
+  );
+
+
+// Vegetasi 2025
+var vegetation2025Vectors =
+  vectorizeLayer(
+    vegetation2025,
+
+    {
+      year: 2025,
+      category: 'vegetasi',
+      label: 'Vegetasi 2025'
+    },
+
+    minVegetationPatchHa,
+    vegetationVectorScale,
+    vegetationSimplifyTolerance
+  );
+
+
+// Gain
+var gainVectors =
+  vectorizeLayer(
+    gain,
+
+    {
+      period: '2024-2025',
+      category: 'gain',
+      from_class: 0,
+      to_class: 1,
+      label: 'Gain vegetasi'
+    },
+
+    minChangePatchHa,
+    changeVectorScale,
+    changeSimplifyTolerance
+  );
+
+
+// Loss
+var lossVectors =
+  vectorizeLayer(
+    loss,
+
+    {
+      period: '2024-2025',
+      category: 'loss',
+      from_class: 1,
+      to_class: 0,
+      label: 'Loss vegetasi'
+    },
+
+    minChangePatchHa,
+    changeVectorScale,
+    changeSimplifyTolerance
+  );
+
+
+print(
+  'Empat GeoJSON disiapkan sebagai batch task.'
+);
+
+
+// =====================================================
+// 6. LOKASI PERUBAHAN TERBESAR
+// =====================================================
+
+var largestGain = gainVectors
+  .sort('area_ha', false)
+  .limit(1)
+  .map(function(feature) {
+
+    return feature.set({
+      change_type:
+        'Gain terbesar'
+    });
+  });
+
+
+var largestLoss = lossVectors
+  .sort('area_ha', false)
+  .limit(1)
+  .map(function(feature) {
+
+    return feature.set({
+      change_type:
+        'Loss terbesar'
+    });
+  });
+
+
+var largestChangeLocations =
+  largestGain.merge(largestLoss);
+
+
+// =====================================================
+// 7. EXPORT CHANGE MAP
+// =====================================================
+
+Export.image.toAsset({
+
+  image:
+    changeMap,
+
+  description:
+    'Export_Ketapang_Change_Map',
+
+  assetId:
+    assetRoot +
+    'ketapang_change_map',
+
+  region:
+    aoi,
+
+  scale:
+    analysisScale,
+
+  maxPixels:
+    1e13,
+
+  pyramidingPolicy: {
+    '.default': 'mode'
+  }
+});
+
+
+Export.image.toDrive({
+
+  image:
+    changeMap,
+
+  description:
+    'Ketapang_Change_Map_2024_2025',
+
+  folder:
+    'UAS_Ketapang',
+
+  fileNamePrefix:
+    'Ketapang_Change_Map_2024_2025',
+
+  region:
+    aoi,
+
+  scale:
+    analysisScale,
+
+  maxPixels:
+    1e13,
+
+  fileFormat:
+    'GeoTIFF'
+});
+
+
+// =====================================================
+// 8. EXPORT TABEL STATISTIK
+// =====================================================
+
+Export.table.toDrive({
+
+  collection:
+    changeStatistics,
+
+  description:
+    'Ketapang_Change_Statistics',
+
+  folder:
+    'UAS_Ketapang',
+
+  fileNamePrefix:
+    'Ketapang_Change_Statistics',
+
+  fileFormat:
+    'CSV'
+});
+
+
+// Lokasi gain dan loss terbesar
+Export.table.toDrive({
+
+  collection:
+    largestChangeLocations,
+
+  description:
+    'Ketapang_Lokasi_Perubahan_Terbesar',
+
+  folder:
+    'UAS_Ketapang',
+
+  fileNamePrefix:
+    'Ketapang_Lokasi_Perubahan_Terbesar',
+
+  fileFormat:
+    'CSV',
+
+  selectors: [
+    'change_type',
+    'category',
+    'area_ha',
+    'centroid_longitude',
+    'centroid_latitude',
+    'vector_scale_m'
+  ]
+});
+
+
+// =====================================================
+// 9. EXPORT EMPAT GEOJSON UNTUK WEBGIS
+// =====================================================
+
+Export.table.toDrive({
+
+  collection:
+    vegetation2024Vectors,
+
+  description:
+    'Ketapang_Vegetasi_2024',
+
+  folder:
+    'UAS_Ketapang_WebGIS',
+
+  fileNamePrefix:
+    'Ketapang_Vegetasi_2024',
+
+  fileFormat:
+    'GeoJSON',
+
+  selectors: [
+    'year',
+    'category',
+    'label',
+    'area_ha',
+    'centroid_longitude',
+    'centroid_latitude',
+    'vector_scale_m',
+    '.geo'
+  ],
+
+  maxVertices:
+    10000
+});
+
+
+Export.table.toDrive({
+
+  collection:
+    vegetation2025Vectors,
+
+  description:
+    'Ketapang_Vegetasi_2025',
+
+  folder:
+    'UAS_Ketapang_WebGIS',
+
+  fileNamePrefix:
+    'Ketapang_Vegetasi_2025',
+
+  fileFormat:
+    'GeoJSON',
+
+  selectors: [
+    'year',
+    'category',
+    'label',
+    'area_ha',
+    'centroid_longitude',
+    'centroid_latitude',
+    'vector_scale_m',
+    '.geo'
+  ],
+
+  maxVertices:
+    10000
+});
+
+
+Export.table.toDrive({
+
+  collection:
+    gainVectors,
+
+  description:
+    'Ketapang_Gain_2024_2025',
+
+  folder:
+    'UAS_Ketapang_WebGIS',
+
+  fileNamePrefix:
+    'Ketapang_Gain_2024_2025',
+
+  fileFormat:
+    'GeoJSON'
+});
+
+
+Export.table.toDrive({
+
+  collection:
+    lossVectors,
+
+  description:
+    'Ketapang_Loss_2024_2025',
+
+  folder:
+    'UAS_Ketapang_WebGIS',
+
+  fileNamePrefix:
+    'Ketapang_Loss_2024_2025',
+
+  fileFormat:
+    'GeoJSON'
+});
