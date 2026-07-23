@@ -1,10 +1,11 @@
 {
   "version": 2,
-  "outputDirectory": "webgis",
-  "rewrites": [
-    {
-      "source": "/dashboard",
-      "destination": "/dashboard.html"
-    }
+  "routes": [
+    { "src": "/css/(.*)", "dest": "/webgis/css/$1" },
+    { "src": "/js/(.*)",  "dest": "/webgis/js/$1" },
+    { "src": "/dashboard.html", "dest": "/webgis/dashboard.html" },
+    { "src": "/dashboard",      "dest": "/webgis/dashboard.html" },
+    { "src": "/",               "dest": "/webgis/index.html" },
+    { "src": "/(.*)",           "dest": "/webgis/$1" }
   ]
 }
