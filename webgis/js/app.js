@@ -11,11 +11,11 @@
     zoom: 9,
     maxZoom: 18,
     files: {
-      boundary: '../data/Ketapang.geojson',
-      veg2024:  '../results/Ketapang_Vegetasi_2024.geojson',
-      veg2025:  '../results/Ketapang_Vegetasi_2025.geojson',
-      gain:     '../results/Ketapang_Gain_2024_2025.geojson',
-      loss:     '../results/Ketapang_Loss_2024_2025.geojson',
+      boundary: 'https://raw.githubusercontent.com/riqqq31/Web-GIS-Ketapang/main/data/Ketapang.geojson',
+      veg2024:  'https://raw.githubusercontent.com/riqqq31/Web-GIS-Ketapang/main/results/Ketapang_Vegetasi_2024.geojson',
+      veg2025:  'https://raw.githubusercontent.com/riqqq31/Web-GIS-Ketapang/main/results/Ketapang_Vegetasi_2025.geojson',
+      gain:     'https://raw.githubusercontent.com/riqqq31/Web-GIS-Ketapang/main/results/Ketapang_Gain_2024_2025.geojson',
+      loss:     'https://raw.githubusercontent.com/riqqq31/Web-GIS-Ketapang/main/results/Ketapang_Loss_2024_2025.geojson',
     },
     styles: {
       boundary: { color: '#2d6a4f', weight: 2.5, fillOpacity: 0, dashArray: '6 4' },
