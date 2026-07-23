@@ -1,18 +1,10 @@
 {
   "version": 2,
-  "cleanUrls": true,
+  "outputDirectory": "webgis",
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/webgis/index.html"
-    },
-    {
       "source": "/dashboard",
-      "destination": "/webgis/dashboard.html"
-    },
-    {
-      "source": "/dashboard.html",
-      "destination": "/webgis/dashboard.html"
+      "destination": "/dashboard.html"
     }
   ]
 }
