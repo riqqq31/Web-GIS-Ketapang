@@ -9,6 +9,7 @@
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.min.js"></script>
 
   <!-- App Styles -->
   <link rel="stylesheet" href="css/style.css" />
@@ -210,9 +211,9 @@
           <div class="info-card">
             <h4>Ground Truth</h4>
             <div class="info-desc">
-              Minimal 300 titik observasi per tahun<br/>
-              150 titik Vegetasi (kelas 1)<br/>
-              150 titik Non-Vegetasi (kelas 0)<br/>
+              Total 400 titik observasi sampel<br/>
+              200 titik Vegetasi (kelas 1)<br/>
+              200 titik Non-Vegetasi (kelas 0)<br/>
               Distribusi tersebar merata di wilayah studi
             </div>
           </div>
@@ -220,7 +221,7 @@
             <h4>Model Klasifikasi</h4>
             <div class="info-value">Random Forest</div>
             <div class="info-desc">
-              Split: 70% Training / 30% Testing<br/>
+              Split: 60% Training / 40% Testing<br/>
               Jumlah Trees: 100<br/>
               Satu model untuk kedua tahun agar perbandingan adil.
             </div>
@@ -250,7 +251,7 @@
           <div class="process-step" data-step="4">
             <div>
               <h4>Training & Testing</h4>
-              <p>Membagi data dengan rasio 70:30 menggunakan randomColumn(), lalu melatih model Random Forest.</p>
+              <p>Membagi data dengan rasio 60:40 menggunakan randomColumn(), lalu melatih model Random Forest.</p>
             </div>
           </div>
           <div class="process-step" data-step="5">
@@ -274,7 +275,7 @@
       <div class="content-panel">
         <div class="content-header">
           <h2>Evaluasi Model</h2>
-          <p>Validasi kualitas model Random Forest menggunakan Confusion Matrix dan metrik APRF dari data testing (30%).</p>
+          <p>Validasi kualitas model Random Forest menggunakan Confusion Matrix dan metrik APRF dari data testing (40%).</p>
         </div>
 
         <h3 style="margin-bottom:20px;font-size:1.1rem;">Confusion Matrix</h3>

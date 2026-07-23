@@ -27,10 +27,10 @@
     // ── Confusion Matrix & APRF ──
     // GANTI NILAI INI DENGAN HASIL EVALUASI GEE ANDA
     evaluation: {
-      tp: 42,   // True Positive
-      fn: 3,    // False Negative
-      fp: 2,    // False Positive
-      tn: 43,   // True Negative
+      tp: 80,   // True Positive
+      fn: 0,    // False Negative
+      fp: 1,    // False Positive
+      tn: 79,   // True Negative
     },
   };
 
@@ -172,7 +172,9 @@
   async function loadGeoJSON(key) {
     if (layerLoaded[key]) return layers[key];
     const url = CONFIG.files[key];
-    const style = CONFIG.styles[key];
+    const baseStyle = CONFIG.styles[key];
+    // Pastikan VectorGrid merender warna fill & stroke dengan benar
+    const style = Object.assign({ fill: true, stroke: true }, baseStyle);
 
     showLoading(`Memuat layer ${key}…`);
     try {
@@ -180,32 +182,47 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
 
-      const geojsonLayer = L.geoJSON(data, {
-        style: () => style,
-        onEachFeature: (feature, layer) => {
-          if (feature.properties) {
-            const props = feature.properties;
-            let html = '';
-            // Build popup based on layer type
-            if (key === 'gain' || key === 'loss') {
-              const type = key === 'gain' ? 'Bertambah (Gain)' : 'Berkurang (Loss)';
-              const areaHa = props.area_ha
-                ? parseFloat(props.area_ha).toLocaleString('id-ID', { maximumFractionDigits: 2 })
-                : '—';
-              html = `
-                <div style="font-size:0.82rem;">
-                  <strong style="color:${key === 'gain' ? '#22c55e' : '#ef4444'}">${type}</strong><br/>
-                  ${props.area_ha ? `Luas: ${areaHa} ha` : ''}
-                </div>`;
-            } else if (key === 'boundary') {
-              html = `<div style="font-size:0.82rem;"><strong>Kabupaten Ketapang</strong><br/>Kalimantan Barat</div>`;
-            } else {
-              const year = key === 'veg2024' ? '2024' : '2025';
-              html = `<div style="font-size:0.82rem;"><strong>Vegetasi ${year}</strong></div>`;
-            }
-            if (html) layer.bindPopup(html);
-          }
+      // Gunakan VectorGrid Slicer alih-alih L.geoJSON
+      const geojsonLayer = L.vectorGrid.slicer(data, {
+        rendererFactory: L.canvas.tile,
+        vectorTileLayerStyles: {
+          sliced: style
         },
+        interactive: true,
+        getFeatureId: function(f) {
+          return f.properties.id || Math.floor(Math.random() * 100000);
+        }
+      });
+
+      // Implementasi Klik & Tanya (Feature Info)
+      geojsonLayer.on('click', function(e) {
+        const props = e.layer.properties;
+        if (!props) return;
+
+        let html = '';
+        if (key === 'gain' || key === 'loss') {
+          const type = key === 'gain' ? 'Bertambah (Gain)' : 'Berkurang (Loss)';
+          const areaHa = props.area_ha
+            ? parseFloat(props.area_ha).toLocaleString('id-ID', { maximumFractionDigits: 2 })
+            : '—';
+          html = `
+            <div style="font-size:0.82rem;">
+              <strong style="color:${key === 'gain' ? '#22c55e' : '#ef4444'}">${type}</strong><br/>
+              ${props.area_ha ? `Luas: ${areaHa} ha` : ''}
+            </div>`;
+        } else if (key === 'boundary') {
+          html = `<div style="font-size:0.82rem;"><strong>Kabupaten Ketapang</strong><br/>Kalimantan Barat</div>`;
+        } else {
+          const year = key === 'veg2024' ? '2024' : '2025';
+          html = `<div style="font-size:0.82rem;"><strong>Vegetasi ${year}</strong></div>`;
+        }
+        
+        if (html) {
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(html)
+            .openOn(map);
+        }
       });
 
       layers[key] = geojsonLayer;
