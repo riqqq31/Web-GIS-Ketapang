@@ -7,9 +7,11 @@ Proyek ini merupakan tugas akhir (UAS) mata kuliah Kapita Selekta yang berfokus 
 - **Kota**: Ketapang
 - **Objek Analisis**: Perubahan Vegetasi (Gain & Loss 2024-2025)
 - **Anggota Kelompok**: 
-  1. Thoriiq (riqqq31)
-  2. [Nama Anggota 2] *(Silakan diisi)*
-  3. [Nama Anggota 3] *(Silakan diisi)*
+Faris Akbar - 1232002005
+Fenza Oktaviano - 1232002018
+Ghalang Raxcel - 1242002075
+Naura Latifa Ramadhani - 1232002038
+Thoriiq Shiddiq Taqiyyuddin - 1242002001
 
 ## Struktur Folder
 Repository ini disusun dengan struktur folder berikut sesuai dengan ketentuan:
