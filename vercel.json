@@ -1,9 +1,0 @@
-{
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/webgis/index.html",
-      "permanent": true
-    }
-  ]
-}
