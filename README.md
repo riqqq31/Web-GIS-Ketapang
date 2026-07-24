@@ -31,7 +31,3 @@ Repository ini disusun dengan struktur folder berikut sesuai dengan ketentuan:
    - **Local Server (Direkomendasikan)**: Gunakan ekstensi seperti Live Server di VSCode, lalu jalankan file `webgis/index.html` atau `webgis/dashboard.html`.
    - **Langsung dari Browser**: Buka file `webgis/index.html` langsung melalui web browser pilihan Anda (Google Chrome, Firefox, dll). *(Catatan: Beberapa fitur seperti memuat file GeoJSON lokal mungkin memerlukan local server agar tidak terkena batasan CORS).*
 
-## Tautan Penting
-- **WebGIS (Live Demo)**: [Tautan WebGIS GitHub Pages](https://riqqq31.github.io/Web-GIS-Ketapang/webgis/index.html) *(Sesuaikan jika link berbeda)*
-- **Laporan Proyek**: [Tautan Unduh Laporan PDF / Google Drive] *(Silakan isi tautan laporan jika terlalu besar untuk diunggah, atau arahkan ke file di dalam folder `report/`)*
-- **Data Besar**: Jika file geojson terlalu besar untuk GitHub, silakan akses melalui [Tautan Unduh Google Drive Data].
